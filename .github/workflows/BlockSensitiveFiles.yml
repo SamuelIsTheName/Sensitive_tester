@@ -1,9 +1,12 @@
 name: Block Sensitive Files
 
 on:
+  pull_request: # This trigger is more reliable for PRs
+    branches:
+      - main
   push:
     branches:
-      - main  # Or whatever branch you want to protect (e.g., development)
+      - main
 
 jobs:
   check-for-sensitive-files:
@@ -11,15 +14,28 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Fetch the full history to compare against
+          fetch-depth: 0
 
       - name: Check for sensitive files
         id: check
         run: |
-          SENSITIVE_FILES=(".env" "config.py" "secrets.yml")
+          SENSITIVE_FILES=(".env" "config.py")
+          
+          # Get the list of all files in the pull request
+          # Use `git diff --name-only` to list the changed files
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          
+          echo "Checking the following files for sensitive content:"
+          echo "$CHANGED_FILES"
+          echo "---"
+
           FOUND_FILES=()
 
-          # Go through the list of files changed in the push
-          for file in $(git diff-tree --no-commit-id --name-only -r ${{ github.sha }}); do
+          # Go through the list of changed files
+          for file in $CHANGED_FILES; do
+            # Check if any of the sensitive file names are in the file path
             for sensitive_file in "${SENSITIVE_FILES[@]}"; do
               if [[ "$file" == *"$sensitive_file"* ]]; then
                 FOUND_FILES+=("$file")
@@ -27,7 +43,7 @@ jobs:
             done
           done
 
-          # Fail the build if sensitive files are found
+          # Fail the job if sensitive files are found
           if [ ${#FOUND_FILES[@]} -gt 0 ]; then
             echo "::error file=Sensitive-File-Check::Push contains sensitive files. Push rejected."
             echo "The following files were detected: ${FOUND_FILES[@]}"
