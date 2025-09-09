@@ -1,0 +1,37 @@
+name: Block Sensitive Files
+
+on:
+  push:
+    branches:
+      - main  # Or whatever branch you want to protect (e.g., development)
+
+jobs:
+  check-for-sensitive-files:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for sensitive files
+        id: check
+        run: |
+          SENSITIVE_FILES=(".env" "config.py" "secrets.yml")
+          FOUND_FILES=()
+
+          # Go through the list of files changed in the push
+          for file in $(git diff-tree --no-commit-id --name-only -r ${{ github.sha }}); do
+            for sensitive_file in "${SENSITIVE_FILES[@]}"; do
+              if [[ "$file" == *"$sensitive_file"* ]]; then
+                FOUND_FILES+=("$file")
+              fi
+            done
+          done
+
+          # Fail the build if sensitive files are found
+          if [ ${#FOUND_FILES[@]} -gt 0 ]; then
+            echo "::error file=Sensitive-File-Check::Push contains sensitive files. Push rejected."
+            echo "The following files were detected: ${FOUND_FILES[@]}"
+            exit 1
+          else
+            echo "No sensitive files detected. Push is allowed."
+          fi
